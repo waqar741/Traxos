@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getCached, setCached, invalidateCacheByPrefix } from '../lib/cache'
 import { useForm } from 'react-hook-form'
 import { Plus, Trash2, X, Search, Download, FileText, Loader, ChevronDown, ChevronUp, Mic } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
@@ -251,19 +252,31 @@ export default function Transactions() {
       if (showLoading) setLoading(true)
       setPage(1)
 
-      // Fetch accounts with balance
-      const { data: accountsData } = await supabase
-        .from('accounts')
-        .select('id, name, color, balance')
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
+      // Fetch accounts with balance (use cache)
+      const accountsCacheKey = `accounts:${user?.id}`
+      let accountsData = getCached<Account[]>(accountsCacheKey)
+      if (!accountsData) {
+        const { data } = await supabase
+          .from('accounts')
+          .select('id, name, color, balance')
+          .eq('user_id', user?.id)
+          .eq('is_active', true)
+        accountsData = data
+        if (accountsData) setCached(accountsCacheKey, accountsData)
+      }
 
-      // Fetch goals
-      const { data: goalsData } = await supabase
-        .from('goals')
-        .select('id, name, current_amount, target_amount')
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
+      // Fetch goals (use cache)
+      const goalsCacheKey = `goals:${user?.id}`
+      let goalsData = getCached<Goal[]>(goalsCacheKey)
+      if (!goalsData) {
+        const { data } = await supabase
+          .from('goals')
+          .select('id, name, current_amount, target_amount')
+          .eq('user_id', user?.id)
+          .eq('is_active', true)
+        goalsData = data
+        if (goalsData) setCached(goalsCacheKey, goalsData)
+      }
 
       // Fetch ALL transactions within date range
       let query = supabase
@@ -499,7 +512,10 @@ export default function Transactions() {
         if (updateError) throw updateError
       }
 
-      // Refresh the data
+      // Invalidate caches and refresh
+      invalidateCacheByPrefix('transactions:')
+      invalidateCacheByPrefix('dashboard:')
+      invalidateCacheByPrefix('accounts:')
       await fetchInitialData()
       handleCloseModal()
     } catch (error: any) {
@@ -575,6 +591,10 @@ export default function Transactions() {
 
       if (updateError) throw updateError
 
+      invalidateCacheByPrefix('transactions:')
+      invalidateCacheByPrefix('dashboard:')
+      invalidateCacheByPrefix('accounts:')
+      invalidateCacheByPrefix('goals:')
       await fetchInitialData()
 
     } catch (error: any) {

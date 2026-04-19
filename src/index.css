@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fix for mobile 100vh bug: use dynamic viewport height */
+.h-dvh-safe {
+  height: 100vh; /* fallback for older browsers */
+  height: 100dvh; /* dynamic viewport height - adjusts for mobile address bar */
+}
+
+.min-h-dvh-safe {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 html.dark,
 html.dark body {
   background-color: #111827;

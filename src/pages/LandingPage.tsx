@@ -14,7 +14,7 @@ export default function LandingPage() {
     }
 
     return (
-        <div className="bg-white dark:bg-gray-900 min-h-screen text-gray-800 dark:text-gray-200">
+        <div className="bg-white dark:bg-gray-900 min-h-dvh-safe text-gray-800 dark:text-gray-200">
             <SEO
                 title={pageData.title}
                 description={pageData.description}

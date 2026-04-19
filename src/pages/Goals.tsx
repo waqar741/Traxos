@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getCached, setCached, invalidateCacheByPrefix } from '../lib/cache'
 import { useForm } from 'react-hook-form'
 import { Plus, Target, X, Pencil, Trash2, TrendingUp, Loader } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
@@ -69,22 +70,35 @@ export default function Goals() {
     }
   }, [user])
 
-  const fetchData = async () => {
+  const fetchData = async (skipCache = false) => {
     try {
-      // Fetch accounts
-      const { data: accountsData } = await supabase
-        .from('accounts')
-        .select('id, name, color, balance')
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
+      const accountsCacheKey = `accounts:${user?.id}`
+      const goalsCacheKey = `goals:${user?.id}`
 
-      // Fetch goals
-      const { data: goalsData } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
+      // Fetch accounts (use cache)
+      let accountsData = !skipCache ? getCached<Account[]>(accountsCacheKey) : null
+      if (!accountsData) {
+        const { data } = await supabase
+          .from('accounts')
+          .select('id, name, color, balance')
+          .eq('user_id', user?.id)
+          .eq('is_active', true)
+        accountsData = data
+        if (accountsData) setCached(accountsCacheKey, accountsData)
+      }
+
+      // Fetch goals (always fresh after mutations, cached otherwise)
+      let goalsData: Goal[] | null = !skipCache ? getCached<Goal[]>(goalsCacheKey) : null
+      if (!goalsData) {
+        const { data } = await supabase
+          .from('goals')
+          .select('*')
+          .eq('user_id', user?.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+        goalsData = data
+        if (goalsData) setCached(goalsCacheKey, goalsData)
+      }
 
       if (accountsData) {
         setAccounts(accountsData)
@@ -98,6 +112,12 @@ export default function Goals() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const invalidateGoalsCaches = () => {
+    invalidateCacheByPrefix('goals:')
+    invalidateCacheByPrefix('dashboard:')
+    invalidateCacheByPrefix('accounts:')
   }
 
   const onSubmit = async (data: GoalForm) => {
@@ -137,7 +157,8 @@ export default function Goals() {
         if (error) throw error
       }
 
-      await fetchData()
+      invalidateGoalsCaches()
+      await fetchData(true)
       handleCloseModal()
     } catch (error: any) {
       setError('root', { message: error.message })
@@ -216,7 +237,8 @@ export default function Goals() {
 
       if (accountError) throw accountError
 
-      await fetchData()
+      invalidateGoalsCaches()
+      await fetchData(true)
       setShowAddMoneyModal(false)
       setAddAmount('')
       setSelectedGoal(null)
@@ -250,7 +272,8 @@ export default function Goals() {
         .eq('id', goalToDelete.id)
 
       if (error) throw error
-      await fetchData()
+      invalidateGoalsCaches()
+      await fetchData(true)
     } catch (error) {
       console.error('Error deleting goal:', error)
     } finally {

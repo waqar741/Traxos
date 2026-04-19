@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getCached, setCached } from '../lib/cache'
 import {
   Wallet,
   TrendingUp,
@@ -252,48 +253,80 @@ export default function Dashboard() {
       const userId = user?.id
       if (!userId) return
 
-      const accountsPromise = supabase
-        .from('accounts')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .order('is_default', { ascending: false }) // Default accounts first
-        .order('created_at', { ascending: false }) // Then newest first
+      const cacheKey = `dashboard:${userId}`
+      const cached = getCached<{
+        accounts: Account[],
+        transactions: Transaction[],
+        debtsCredits: DebtCredit[],
+        goals: Goal[]
+      }>(cacheKey)
 
-      const allTransactionsPromise = supabase
-        .from('transactions')
-        .select('*, accounts(name, color)')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+      let fetchedAccountsData: Account[]
+      let fetchedTransactionsData: Transaction[]
+      let debtsCreditsData: DebtCredit[]
+      let goalsData: Goal[]
 
-      const debtsCreditsPromise = supabase
-        .from('debts_credits')
-        .select('id, amount, type, is_settled')
-        .eq('user_id', userId)
+      if (cached) {
+        // Use cached data
+        fetchedAccountsData = cached.accounts
+        fetchedTransactionsData = cached.transactions
+        debtsCreditsData = cached.debtsCredits
+        goalsData = cached.goals
+      } else {
+        // Fetch fresh data from Supabase
+        const accountsPromise = supabase
+          .from('accounts')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false })
 
-      const [
-        { data: accountsData, error: accountsError },
-        { data: transactionsData, error: transactionsError },
-        { data: debtsCreditsData, error: debtsCreditsError },
-      ] = await Promise.all([
-        accountsPromise,
-        allTransactionsPromise,
-        debtsCreditsPromise,
-      ])
+        const allTransactionsPromise = supabase
+          .from('transactions')
+          .select('*, accounts(name, color)')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
 
-      const { data: goalsData } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .limit(3)
+        const debtsCreditsPromise = supabase
+          .from('debts_credits')
+          .select('id, amount, type, is_settled')
+          .eq('user_id', userId)
 
-      if (accountsError) throw accountsError
-      if (transactionsError) throw transactionsError
-      if (debtsCreditsError) throw debtsCreditsError
+        const [
+          { data: accountsData, error: accountsError },
+          { data: transactionsData, error: transactionsError },
+          { data: debtsCreditsResult, error: debtsCreditsError },
+        ] = await Promise.all([
+          accountsPromise,
+          allTransactionsPromise,
+          debtsCreditsPromise,
+        ])
 
-      const fetchedAccountsData = accountsData || []
-      const fetchedTransactionsData = transactionsData || []
+        const { data: goalsResult } = await supabase
+          .from('goals')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .limit(3)
+
+        if (accountsError) throw accountsError
+        if (transactionsError) throw transactionsError
+        if (debtsCreditsError) throw debtsCreditsError
+
+        fetchedAccountsData = accountsData || []
+        fetchedTransactionsData = transactionsData || []
+        debtsCreditsData = debtsCreditsResult || []
+        goalsData = goalsResult || []
+
+        // Cache the fetched data (2 minute TTL)
+        setCached(cacheKey, {
+          accounts: fetchedAccountsData,
+          transactions: fetchedTransactionsData,
+          debtsCredits: debtsCreditsData,
+          goals: goalsData
+        })
+      }
 
       // Client-side sorting as fallback
       const sortedAccounts = [...fetchedAccountsData].sort((a, b) => {
@@ -304,8 +337,8 @@ export default function Dashboard() {
 
       setAccounts(sortedAccounts)
       setAllTransactions(fetchedTransactionsData)
-      setDebtsCredits(debtsCreditsData || [])
-      setGoals(goalsData || [])
+      setDebtsCredits(debtsCreditsData)
+      setGoals(goalsData)
 
       if (fetchedTransactionsData && debtsCreditsData) {
         const totalIncome = fetchedTransactionsData

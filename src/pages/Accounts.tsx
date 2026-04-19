@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getCached, setCached, invalidateCacheByPrefix } from '../lib/cache'
 import { useForm } from 'react-hook-form'
 import { Plus, Wallet, CreditCard, Banknote, Smartphone, Users, X, Pencil, Trash2, ArrowRightLeft, Loader, Shield } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
@@ -84,8 +85,19 @@ export default function Accounts() {
     }
   }, [user])
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = async (skipCache = false) => {
     try {
+      const cacheKey = `accounts:${user?.id}`
+
+      if (!skipCache) {
+        const cached = getCached<Account[]>(cacheKey)
+        if (cached) {
+          setAccounts(cached)
+          setLoading(false)
+          return
+        }
+      }
+
       const { data, error } = await supabase
         .from('accounts')
         .select('*')
@@ -97,12 +109,20 @@ export default function Accounts() {
 
       if (data) {
         setAccounts(data)
+        setCached(cacheKey, data)
       }
     } catch (error) {
       console.error('Error fetching accounts:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  // Invalidate related caches after any account mutation
+  const invalidateAccountCaches = () => {
+    invalidateCacheByPrefix('accounts:')
+    invalidateCacheByPrefix('dashboard:')
+    invalidateCacheByPrefix('transactions:')
   }
 
 
@@ -179,7 +199,8 @@ export default function Accounts() {
         if (error) throw error
       }
 
-      await fetchAccounts()
+      invalidateAccountCaches()
+      await fetchAccounts(true)
       handleCloseModal()
     } catch (error: any) {
       setError('root', { message: error.message })
@@ -226,7 +247,8 @@ export default function Accounts() {
         ])
       }
 
-      await fetchAccounts()
+      invalidateAccountCaches()
+      await fetchAccounts(true)
       setShowTransferModal(false)
       resetTransfer()
     } catch (error: any) {
@@ -269,7 +291,8 @@ export default function Accounts() {
         }
         throw error
       }
-      await fetchAccounts()
+      invalidateAccountCaches()
+      await fetchAccounts(true)
     } catch (error: any) {
       console.error('Error deleting account:', error)
       alert(`Error deleting account: ${error.message}`)

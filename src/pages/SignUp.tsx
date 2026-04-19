@@ -56,7 +56,7 @@ export default function SignUp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center p-4 sm:px-6 lg:px-8">
+    <div className="min-h-dvh-safe bg-gray-50 dark:bg-gray-900 flex flex-col justify-center p-4 sm:px-6 lg:px-8">
       <SEO title="Sign Up" description="Create a new Traxos account." canonical="/signup" />
       {/* Back Button */}
       <button

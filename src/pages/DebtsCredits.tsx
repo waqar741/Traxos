@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getCached, setCached, invalidateCacheByPrefix } from '../lib/cache'
 import { useForm } from 'react-hook-form'
 import { Plus, User, X, Trash2, Wallet, Mic, Search, ChevronDown, ChevronUp, Pencil, Calendar, Banknote, Phone } from 'lucide-react'
 import { format } from 'date-fns'
@@ -181,6 +182,13 @@ export default function DebtsCredits() {
 
   const fetchAccounts = async () => {
     try {
+      const cacheKey = `accounts:${user?.id}`
+      const cached = getCached<Account[]>(cacheKey)
+      if (cached) {
+        setAccounts(cached)
+        return
+      }
+
       const { data, error } = await supabase
         .from('accounts')
         .select('*')
@@ -189,10 +197,18 @@ export default function DebtsCredits() {
         .order('created_at', { ascending: true })
 
       if (error) throw error
-      if (data) setAccounts(data)
+      if (data) {
+        setAccounts(data)
+        setCached(cacheKey, data)
+      }
     } catch (error) {
       console.error('Error fetching accounts:', error)
     }
+  }
+
+  const invalidateDebtsCaches = () => {
+    invalidateCacheByPrefix('dashboard:')
+    invalidateCacheByPrefix('accounts:')
   }
 
   const onSubmit = async (data: DebtCreditForm) => {
@@ -248,6 +264,7 @@ export default function DebtsCredits() {
         if (error) throw error
       }
 
+      invalidateDebtsCaches()
       await fetchDebtsCredits()
       handleCloseModal()
     } catch (error: any) {
@@ -280,6 +297,7 @@ export default function DebtsCredits() {
               })
             if (retryError) throw retryError
           }
+          invalidateDebtsCaches()
           await fetchDebtsCredits()
           handleCloseModal()
           setErrorMessage('Note: Phone number was not saved because the database needs to be updated. Other details were saved.')
@@ -439,6 +457,7 @@ export default function DebtsCredits() {
         if (updateError) throw updateError
       }
 
+      invalidateDebtsCaches()
       await fetchDebtsCredits()
       await fetchAccounts()
     } catch (error: any) {
@@ -484,6 +503,7 @@ export default function DebtsCredits() {
         .eq('id', id)
 
       if (error) throw error
+      invalidateDebtsCaches()
       await fetchDebtsCredits()
     } catch (error) {
       console.error('Error deleting item:', error)

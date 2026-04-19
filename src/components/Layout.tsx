@@ -88,7 +88,7 @@ export default function Layout() {
   ]
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-dvh-safe bg-gray-50 dark:bg-gray-900">
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div

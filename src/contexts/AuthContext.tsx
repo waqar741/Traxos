@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { clearCache } from '../lib/cache'
 
 interface AuthContextType {
   user: User | null
@@ -158,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Supabase is not configured. Please set up your Supabase credentials in the .env file.')
     }
 
+    clearCache() // Clear all cached data on sign out
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   }
