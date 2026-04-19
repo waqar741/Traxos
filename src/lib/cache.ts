@@ -21,13 +21,18 @@ const DEFAULT_TTL = 2 * 60 * 1000
  */
 export function getCached<T>(key: string): T | null {
   const entry = cache.get(key)
-  if (!entry) return null
+  if (!entry) {
+    console.log(`[Cache] MISS: ${key}`)
+    return null
+  }
 
   if (Date.now() > entry.expiresAt) {
+    console.log(`[Cache] EXPIRED: ${key}`)
     cache.delete(key)
     return null
   }
 
+  console.log(`[Cache] HIT: ${key}`)
   return entry.data as T
 }
 

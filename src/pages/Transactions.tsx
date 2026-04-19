@@ -252,85 +252,87 @@ export default function Transactions() {
       if (showLoading) setLoading(true)
       setPage(1)
 
-      // Fetch accounts with balance (use cache)
-      const accountsCacheKey = `accounts:${user?.id}`
+      const userId = user?.id
+      if (!userId) return
+
+      // --- 1. Supporting Data Caching (Accounts, Goals) ---
+      const accountsCacheKey = `accounts:${userId}`
       let accountsData = getCached<Account[]>(accountsCacheKey)
       if (!accountsData) {
         const { data } = await supabase
           .from('accounts')
           .select('id, name, color, balance')
-          .eq('user_id', user?.id)
+          .eq('user_id', userId)
           .eq('is_active', true)
         accountsData = data
         if (accountsData) setCached(accountsCacheKey, accountsData)
       }
+      if (accountsData) setAccounts(accountsData)
 
-      // Fetch goals (use cache)
-      const goalsCacheKey = `goals:${user?.id}`
+      const goalsCacheKey = `goals:${userId}`
       let goalsData = getCached<Goal[]>(goalsCacheKey)
       if (!goalsData) {
         const { data } = await supabase
           .from('goals')
           .select('id, name, current_amount, target_amount')
-          .eq('user_id', user?.id)
+          .eq('user_id', userId)
           .eq('is_active', true)
         goalsData = data
         if (goalsData) setCached(goalsCacheKey, goalsData)
       }
-
-      // Fetch ALL transactions within date range
-      let query = supabase
-        .from('transactions')
-        .select(`
-  *,
-  accounts(
-    id,
-    name,
-    color,
-    balance
-  )
-    `)
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-
-      // Apply date filters to DB query to limit initial payload size
-      if (dateFrom) {
-        query = query.gte('created_at', dateFrom)
-      }
-      if (dateTo) {
-        query = query.lte('created_at', dateTo + 'T23:59:59.999Z')
-      }
-
-      const { data: transactionsData, error } = await query
-
-      if (error) throw error
-
-      // Fetch transfers
-      let transfersQuery = supabase
-        .from('transfers')
-        .select('*')
-        .eq('user_id', user?.id)
-
-      if (dateFrom) {
-        transfersQuery = transfersQuery.gte('created_at', dateFrom)
-      }
-      if (dateTo) {
-        transfersQuery = transfersQuery.lte('created_at', dateTo + 'T23:59:59.999Z')
-      }
-
-      const { data: transfersData, error: transfersError } = await transfersQuery
-
-      if (transfersError) throw transfersError
-
-      if (accountsData) setAccounts(accountsData)
       if (goalsData) setGoals(goalsData)
 
-      let allItems: Transaction[] = []
+      // --- 2. Main List Caching (Transactions & Transfers) ---
+      // The cache key must include all primary filters that affect the initial fetch
+      const listCacheKey = `transactions_list:${userId}:${dateFrom}:${dateTo}`
+      interface CachedListData {
+        transactions: any[]
+        transfers: any[]
+      }
 
-      if (transactionsData) allItems = [...transactionsData]
+      let transactionsData: any[] = []
+      let transfersData: any[] = []
+
+      const cachedList = getCached<CachedListData>(listCacheKey)
+
+      if (cachedList) {
+        transactionsData = cachedList.transactions
+        transfersData = cachedList.transfers
+      } else {
+        // Fetch from Supabase
+        const txQuery = supabase
+          .from('transactions')
+          .select(`*, accounts(id, name, color, balance)`)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .gte('created_at', dateFrom)
+          .lte('created_at', dateTo + 'T23:59:59.999Z')
+
+        const tfQuery = supabase
+          .from('transfers')
+          .select('*')
+          .eq('user_id', userId)
+          .gte('created_at', dateFrom)
+          .lte('created_at', dateTo + 'T23:59:59.999Z')
+
+        const [{ data: txResult, error: txError }, { data: tfResult, error: tfError }] = await Promise.all([
+          txQuery,
+          tfQuery
+        ])
+
+        if (txError) throw txError
+        if (tfError) throw tfError
+
+        transactionsData = txResult || []
+        transfersData = tfResult || []
+
+        setCached(listCacheKey, { transactions: transactionsData, transfers: transfersData })
+      }
+
+      // --- 3. Process & Merge Data ---
+      let allItems: Transaction[] = [...transactionsData]
 
       if (transfersData) {
-        // Map transfers to Transaction format
         const formattedTransfers = transfersData.map(transfer => {
           const fromAccount = accountsData?.find(a => a.id === transfer.from_account_id)
           const toAccount = accountsData?.find(a => a.id === transfer.to_account_id)
@@ -339,7 +341,7 @@ export default function Transactions() {
             ...transfer,
             type: 'transfer',
             category: 'Transfer',
-            description: transfer.description || `Transfer from ${fromAccount?.name || 'Unknown'} to ${toAccount?.name || 'Unknown'} `,
+            description: transfer.description || `Transfer from ${fromAccount?.name || 'Unknown'} to ${toAccount?.name || 'Unknown'}`,
             account_id: transfer.from_account_id,
             is_recurring: false,
             recurring_frequency: null,
@@ -349,7 +351,7 @@ export default function Transactions() {
         allItems = [...allItems, ...formattedTransfers]
       }
 
-      // Filter merged results client-side
+      // Apply client-side filters (these don't require API calls)
       if (filterType !== 'all') {
         allItems = allItems.filter(item => item.type === filterType)
       }
@@ -373,7 +375,7 @@ export default function Transactions() {
 
       setAllTransactions(allItems)
 
-      // Initialize visible transactions
+      // Initialize visible transactions (pagination)
       const initialBatch = allItems.slice(0, pageSize)
       setTransactions(initialBatch)
       setHasMore(allItems.length > pageSize)

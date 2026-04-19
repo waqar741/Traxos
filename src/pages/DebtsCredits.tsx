@@ -136,9 +136,20 @@ export default function DebtsCredits() {
     }
   }, [user])
 
-  const fetchDebtsCredits = async () => {
+  const fetchDebtsCredits = async (skipCache = false) => {
     try {
-      // First, perform cleanup of old settled items
+      const cacheKey = `debts_credits:${user?.id}`
+
+      if (!skipCache) {
+        const cached = getCached<DebtCredit[]>(cacheKey)
+        if (cached) {
+          setDebtsCredits(cached)
+          setLoading(false)
+          return
+        }
+      }
+
+      // Perform cleanup of old settled items (only on fresh fetch)
       const { data: oldSettled } = await supabase
         .from('debts_credits')
         .select('id, settlement_transaction_id, is_settled, transactions!settlement_transaction_id(created_at)')
@@ -172,7 +183,10 @@ export default function DebtsCredits() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      if (data) setDebtsCredits(data)
+      if (data) {
+        setDebtsCredits(data)
+        setCached(cacheKey, data)
+      }
     } catch (error) {
       console.error('Error fetching debts/credits:', error)
     } finally {

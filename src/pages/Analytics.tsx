@@ -15,6 +15,7 @@ import {
   Legend
 } from 'recharts'
 import { supabase } from '../lib/supabase'
+import { getCached, setCached } from '../lib/cache'
 import { useAuth } from '../contexts/AuthContext'
 import { useCurrency } from '../hooks/useCurrency'
 import { TrendingUp, TrendingDown, DollarSign, Activity, Calendar } from 'lucide-react'
@@ -111,10 +112,20 @@ export default function Analytics() {
     return labels[filter]
   }
 
-  const fetchData = async () => {
+  const fetchData = async (skipCache = false) => {
     setLoading(true)
     try {
       const { start, end } = getDateRange()
+      const cacheKey = `analytics:${user?.id}:${timeFilter}`
+
+      if (!skipCache) {
+        const cached = getCached<any[]>(cacheKey)
+        if (cached) {
+          processData(cached, start, end)
+          setLoading(false)
+          return
+        }
+      }
 
       const { data: txData, error } = await supabase
         .from('transactions')
@@ -126,7 +137,10 @@ export default function Analytics() {
 
       if (error) throw error
 
-      processData(txData || [], start, end)
+      if (txData) {
+        setCached(cacheKey, txData)
+        processData(txData, start, end)
+      }
 
     } catch (error) {
       console.error('Error fetching analytics:', error)
