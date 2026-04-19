@@ -595,7 +595,7 @@ export default function Accounts() {
       <div className="hidden sm:flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Accounts (Updated)</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Accounts</h1>
             <PageGuide
               title="Accounts"
               description="Manage your physical and digital wallets. Track balances across different banks and keep your net worth updated."
