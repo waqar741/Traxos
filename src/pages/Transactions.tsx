@@ -406,7 +406,11 @@ export default function Transactions() {
     return isBefore(transactionDateObj, sixHoursAgo)
   }
 
+  const [submitGuard, setSubmitGuard] = useState(false)
+
   const onSubmit = async (data: TransactionForm) => {
+    if (submitGuard) return
+    setSubmitGuard(true)
     try {
       // Fetch current account balance first for both create and edit to ensure validation
       const { data: accountData, error: accountError } = await supabase
@@ -515,6 +519,7 @@ export default function Transactions() {
       }
 
       // Invalidate caches and refresh
+      invalidateCacheByPrefix('transactions_list:')
       invalidateCacheByPrefix('transactions:')
       invalidateCacheByPrefix('dashboard:')
       invalidateCacheByPrefix('accounts:')
@@ -522,6 +527,8 @@ export default function Transactions() {
       handleCloseModal()
     } catch (error: any) {
       setError('root', { message: error.message })
+    } finally {
+      setSubmitGuard(false)
     }
   }
 
@@ -593,6 +600,7 @@ export default function Transactions() {
 
       if (updateError) throw updateError
 
+      invalidateCacheByPrefix('transactions_list:')
       invalidateCacheByPrefix('transactions:')
       invalidateCacheByPrefix('dashboard:')
       invalidateCacheByPrefix('accounts:')
@@ -1534,10 +1542,10 @@ export default function Transactions() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || submitGuard}
                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? 'Saving...' : (editingTransaction ? 'Update' : 'Add')}
+                  {(isSubmitting || submitGuard) ? 'Saving...' : (editingTransaction ? 'Update' : 'Add')}
                 </button>
               </div>
             </form>

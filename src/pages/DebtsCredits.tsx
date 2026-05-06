@@ -221,8 +221,11 @@ export default function DebtsCredits() {
   }
 
   const invalidateDebtsCaches = () => {
+    invalidateCacheByPrefix('debts_credits:')
     invalidateCacheByPrefix('dashboard:')
     invalidateCacheByPrefix('accounts:')
+    invalidateCacheByPrefix('transactions:')
+    invalidateCacheByPrefix('transactions_list:')
   }
 
   const onSubmit = async (data: DebtCreditForm) => {

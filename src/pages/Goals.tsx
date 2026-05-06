@@ -118,6 +118,8 @@ export default function Goals() {
     invalidateCacheByPrefix('goals:')
     invalidateCacheByPrefix('dashboard:')
     invalidateCacheByPrefix('accounts:')
+    invalidateCacheByPrefix('transactions:')
+    invalidateCacheByPrefix('transactions_list:')
   }
 
   const onSubmit = async (data: GoalForm) => {

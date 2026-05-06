@@ -123,6 +123,7 @@ export default function Accounts() {
     invalidateCacheByPrefix('accounts:')
     invalidateCacheByPrefix('dashboard:')
     invalidateCacheByPrefix('transactions:')
+    invalidateCacheByPrefix('transactions_list:')
   }
 
 
